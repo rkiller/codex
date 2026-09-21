@@ -1,0 +1,109 @@
+:root {
+  color-scheme: light;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #292035;
+  background: #f6f3f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 56px 24px;
+  background: radial-gradient(ellipse at 15% 12%, #e9ddf5 0, transparent 48%),
+              radial-gradient(ellipse at 88% 88%, #e3e5f4 0, transparent 45%), #f8f6f9;
+}
+.shell { width: min(100%, 920px); }
+.brand { display: flex; align-items: center; gap: 22px; margin: 0 4px 25px; }
+.brand-name { font-size: 25px; font-weight: 650; letter-spacing: -.9px; }
+.brand-caption { border-left: 1px solid #d3cbdc; padding-left: 22px; font-size: 10px; font-weight: 600; letter-spacing: 2px; color: #736780; }
+.card {
+  display: grid;
+  grid-template-columns: 40% 60%;
+  overflow: hidden;
+  border: 1px solid #fff;
+  border-radius: 28px;
+  background: #fffefee8;
+  box-shadow: 0 28px 80px -30px #49305d40, 0 3px 12px #49305d06;
+}
+.artwork {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 32px;
+  padding: 40px 28px;
+  background: linear-gradient(155deg, #eee5f3, #e2d6ea);
+  border-right: 1px solid #e9e2ee;
+}
+.logo {
+  display: block;
+  width: min(100%, 260px);
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 24px;
+  box-shadow: 0 20px 35px -20px #25112d85;
+}
+.codex-mark {
+  display: grid;
+  place-items: center;
+  width: 160px;
+  aspect-ratio: 1;
+  border: 1px solid #ffffffa8;
+  border-radius: 38px;
+  color: #705084;
+  background: linear-gradient(145deg, #fbf8fd, #e5d9ee);
+  font: 500 58px ui-monospace, monospace;
+  letter-spacing: -8px;
+  box-shadow: 0 20px 35px -24px #49305d85;
+}
+.art-caption { text-align: center; font-size: 14px; line-height: 1.7; color: #62516f; letter-spacing: .1px; }
+.content { padding: 65px 52px 60px; align-self: center; }
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border-radius: 7px;
+  color: #664782;
+  background: #f2edf7;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 1.3px;
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+h1 { font-size: clamp(29px, 3.6vw, 39px); line-height: 1.15; font-weight: 600; letter-spacing: -1.5px; margin: 24px 0 18px; overflow-wrap: break-word; }
+.message { color: #6b6074; font-size: 15px; line-height: 1.8; margin: 0; }
+.next-step { display: flex; align-items: center; gap: 12px; border-top: 1px solid #eee8f1; padding-top: 23px; margin-top: 32px; }
+.next-step p { margin: 0; font-size: 12px; line-height: 1.6; color: #6b6074; }
+.step-mark { display: grid; place-items: center; flex: 0 0 26px; height: 26px; border: 1px solid #e5dbe9; border-radius: 50%; color: #725584; font-size: 13px; }
+.success .status { color: #2e7159; background: #eaf4ee; }
+.success .step-mark { color: #2e7159; border-color: #cde3d6; }
+.failure .status, .invalid .status { color: #9a563a; background: #fbefe8; }
+.pending .status-dot { animation: breathe 1.6s ease-in-out infinite; }
+footer { display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 27px; color: #7a6b85; font-size: 11px; letter-spacing: .15px; }
+.footer-dot { width: 5px; height: 5px; border-radius: 50%; background: #9b86ac; }
+.footer-divider { margin: 0 3px; }
+@keyframes breathe { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .pending .status-dot { animation: none; } }
+@media (max-width: 620px) {
+  body { padding: 32px 18px; }
+  .brand { margin-bottom: 20px; gap: 16px; }
+  .brand-name { font-size: 23px; }
+  .brand-caption { padding-left: 16px; font-size: 9px; letter-spacing: 1.4px; }
+  .card { grid-template-columns: 1fr; border-radius: 23px; }
+  .artwork { padding: 27px; border-right: 0; border-bottom: 1px solid #e9e2ee; }
+  .logo { width: 144px; border-radius: 19px; }
+  .codex-mark { width: 120px; font-size: 46px; border-radius: 30px; }
+  .art-caption { display: none; }
+  .content { padding: 32px 28px; }
+  h1 { font-size: 32px; }
+  .next-step { margin-top: 25px; padding-top: 20px; }
+  footer { flex-wrap: wrap; font-size: 10px; gap: 7px; }
+}

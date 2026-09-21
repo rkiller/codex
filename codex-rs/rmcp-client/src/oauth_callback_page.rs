@@ -6,6 +6,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+use sha2::Digest;
 use tiny_http::Header;
 use tiny_http::Response;
 use tiny_http::Server;
@@ -14,6 +17,29 @@ use tokio::sync::oneshot;
 use super::CallbackOutcome;
 use super::CallbackResult;
 use super::parse_oauth_callback;
+
+const STYLE: &str = include_str!("oauth_callback_assets/page.css");
+const SYNTROPIC_LOGO: &[u8] = include_bytes!("oauth_callback_assets/syntropic.png");
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CallbackBrand {
+    Codex,
+    Syntropic,
+}
+
+impl CallbackBrand {
+    pub(crate) fn for_server_url(server_url: &str) -> Self {
+        if url::Url::parse(server_url).is_ok_and(|url| {
+            url.scheme() == "https"
+                && url.host_str() == Some("platform.syntropic.com")
+                && url.path().trim_end_matches('/') == "/mcp"
+        }) {
+            Self::Syntropic
+        } else {
+            Self::Codex
+        }
+    }
+}
 
 const RESULT_DELIVERY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -48,7 +74,46 @@ enum CallbackPage {
 }
 
 impl CallbackPage {
-    fn response(self) -> Response<Cursor<Vec<u8>>> {
+    fn response(self, brand: CallbackBrand) -> Response<Cursor<Vec<u8>>> {
+        let (state_class, status_label, step_mark, next_step) = match self {
+            Self::Pending => (
+                "pending",
+                "CONNECTING",
+                "…",
+                "This page will update automatically.",
+            ),
+            Self::Success => (
+                "success",
+                "CONNECTED",
+                "✓",
+                "Return to Codex whenever you are ready.",
+            ),
+            Self::Failure => (
+                "failure",
+                "ACTION NEEDED",
+                "↗",
+                "Start a new sign-in from Codex.",
+            ),
+            Self::Invalid => (
+                "invalid",
+                "CHECK REQUEST",
+                "↗",
+                "Use the sign-in link provided by Codex.",
+            ),
+        };
+        let (brand_name, artwork) = match brand {
+            CallbackBrand::Syntropic => (
+                "Syntropic",
+                format!(
+                    "<img class=\"logo\" src=\"data:image/png;base64,{}\" width=\"1024\" height=\"1024\" alt=\"Syntropic logo\">",
+                    STANDARD.encode(SYNTROPIC_LOGO)
+                ),
+            ),
+            CallbackBrand::Codex => (
+                "Codex",
+                "<span class=\"codex-mark\" aria-hidden=\"true\">&gt;_</span>".to_string(),
+            ),
+        };
         let (title, message, refresh, status) = match self {
             Self::Pending => (
                 "Completing authentication",
@@ -76,21 +141,29 @@ impl CallbackPage {
             ),
         };
         let mut response = Response::from_string(format!(
-            "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
-             <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
-             <title>{title}</title>\n{refresh}\n</head>\n<body>\n\
-             <h1>{title}</h1>\n<p>{message}</p>\n</body>\n</html>\n"
+            include_str!("oauth_callback_assets/page.html"),
+            title = title,
+            message = message,
+            refresh = refresh,
+            style = STYLE,
+            brand_name = brand_name,
+            artwork = artwork,
+            state_class = state_class,
+            status_label = status_label,
+            step_mark = step_mark,
+            next_step = next_step,
         ))
         .with_status_code(status);
+        let style_hash = STANDARD.encode(sha2::Sha256::digest(STYLE.as_bytes()));
+        let content_security_policy = format!(
+            "default-src 'none'; style-src 'sha256-{style_hash}'; img-src data:; base-uri 'none'; frame-ancestors 'none'"
+        );
         for (name, value) in [
             ("Content-Type", "text/html; charset=utf-8"),
             ("Cache-Control", "no-store"),
             ("Referrer-Policy", "no-referrer"),
             ("X-Content-Type-Options", "nosniff"),
-            (
-                "Content-Security-Policy",
-                "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
-            ),
+            ("Content-Security-Policy", content_security_policy.as_str()),
         ] {
             let Ok(header) = Header::from_bytes(name, value) else {
                 unreachable!("static callback headers must be valid");
@@ -105,6 +178,7 @@ pub(crate) fn spawn_callback_server(
     server: Arc<Server>,
     tx: oneshot::Sender<CallbackResult>,
     expected_callback_path: String,
+    brand: CallbackBrand,
 ) -> CallbackCompletion {
     let (outcome, result) = oneshot::channel();
     let (delivered, delivery) = oneshot::channel();
@@ -115,11 +189,11 @@ pub(crate) fn spawn_callback_server(
                 CallbackOutcome::Success(callback) => CallbackResult::Success(callback),
                 CallbackOutcome::Error(error) => CallbackResult::Error(error),
                 CallbackOutcome::Invalid => {
-                    let _ = request.respond(CallbackPage::Invalid.response());
+                    let _ = request.respond(CallbackPage::Invalid.response(brand));
                     continue;
                 }
             };
-            let _ = request.respond(CallbackPage::Pending.response());
+            let _ = request.respond(CallbackPage::Pending.response(brand));
             let _ = tx.send(callback);
 
             // Dropping the login or its uncommitted credentials is a failure,
@@ -129,11 +203,11 @@ pub(crate) fn spawn_callback_server(
             while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
                 match server.recv_timeout(remaining) {
                     Ok(Some(request)) if request.url() == result_path => {
-                        let _ = request.respond(page.response());
+                        let _ = request.respond(page.response(brand));
                         break;
                     }
                     Ok(Some(request)) => {
-                        let _ = request.respond(CallbackPage::Invalid.response());
+                        let _ = request.respond(CallbackPage::Invalid.response(brand));
                     }
                     Ok(None) => continue,
                     Err(_) => break,

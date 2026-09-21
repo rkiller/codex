@@ -46,6 +46,7 @@ use codex_config::types::OAuthCredentialsStoreMode;
 
 #[path = "oauth_callback_page.rs"]
 mod callback_page;
+use callback_page::CallbackBrand;
 pub(crate) use callback_page::CallbackCompletion;
 use callback_page::spawn_callback_server;
 
@@ -641,7 +642,12 @@ impl OauthLoginFlow {
         };
         let callback_path = callback_path_from_redirect_uri(&redirect_uri)?;
         let (tx, rx) = oneshot::channel();
-        let callback_completion = spawn_callback_server(server, tx, callback_path);
+        let callback_completion = spawn_callback_server(
+            server,
+            tx,
+            callback_path,
+            CallbackBrand::for_server_url(server_url),
+        );
         let auth_url = append_query_param(
             &oauth_state.get_authorization_url().await?,
             "resource",

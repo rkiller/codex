@@ -39,13 +39,13 @@ async fn request(server: &Server, path: &str) -> String {
     .unwrap()
 }
 
-fn html(response: &str) -> &str {
+fn html(response: &str) -> String {
     let (headers, body) = response.split_once("\r\n\r\n").unwrap();
     let headers = headers.to_ascii_lowercase();
     assert!(headers.contains("content-type: text/html; charset=utf-8"));
     assert!(headers.contains("cache-control: no-store"));
     assert!(headers.contains("referrer-policy: no-referrer"));
-    body
+    body.replace(STYLE, "[shared callback stylesheet]")
 }
 
 #[tokio::test]
@@ -55,7 +55,12 @@ async fn callback_renders_html_without_claiming_success_before_exchange() {
         server: Arc::clone(&server),
     };
     let (tx, rx) = oneshot::channel();
-    let completion = spawn_callback_server(Arc::clone(&server), tx, "/callback/server".to_string());
+    let completion = spawn_callback_server(
+        Arc::clone(&server),
+        tx,
+        "/callback/server".to_string(),
+        CallbackBrand::Codex,
+    );
     let invalid = request(&server, "/wrong?code=synthetic-code&state=synthetic-state").await;
     assert!(invalid.starts_with("HTTP/1.1 400"));
     insta::assert_snapshot!("invalid_callback", html(&invalid));
@@ -85,7 +90,12 @@ async fn callback_failure_and_cancellation_do_not_render_provider_input() {
             server: Arc::clone(&server),
         };
         let (tx, rx) = oneshot::channel();
-        let completion = spawn_callback_server(Arc::clone(&server), tx, "/callback".to_string());
+        let completion = spawn_callback_server(
+            Arc::clone(&server),
+            tx,
+            "/callback".to_string(),
+            CallbackBrand::Codex,
+        );
         let pending = request(
             &server,
             "/callback?error=secret&error_description=%3Cscript%3Ealert%281%29%3C%2Fscript%3E",
@@ -282,4 +292,49 @@ async fn browser_reports_exchange_validation_and_storage_failures() {
             );
         }
     }
+}
+
+#[test]
+fn syntropic_branding_is_scoped_and_embedded_in_every_status() {
+    assert_eq!(
+        CallbackBrand::for_server_url("https://platform.syntropic.com/mcp"),
+        CallbackBrand::Syntropic
+    );
+    assert_eq!(
+        CallbackBrand::for_server_url("https://platform.syntropic.com.example/mcp"),
+        CallbackBrand::Codex
+    );
+    assert_eq!(
+        CallbackBrand::for_server_url("https://other.example/mcp"),
+        CallbackBrand::Codex
+    );
+    let logo = format!("data:image/png;base64,{}", STANDARD.encode(SYNTROPIC_LOGO));
+    let style_hash = STANDARD.encode(sha2::Sha256::digest(STYLE.as_bytes()));
+    let mut rendered = Vec::new();
+    for (name, page) in [
+        ("pending", CallbackPage::Pending),
+        ("success", CallbackPage::Success),
+        ("failure", CallbackPage::Failure),
+        ("invalid", CallbackPage::Invalid),
+    ] {
+        let response = page.response(CallbackBrand::Syntropic);
+        let csp = response
+            .headers()
+            .iter()
+            .find(|header| header.field.equiv("Content-Security-Policy"))
+            .unwrap()
+            .value
+            .as_str();
+        assert!(csp.contains(&format!("style-src 'sha256-{style_hash}'")));
+        assert!(csp.contains("img-src data:"));
+        let mut body = String::new();
+        response.into_reader().read_to_string(&mut body).unwrap();
+        assert!(body.contains(&logo));
+        assert!(body.contains("alt=\"Syntropic logo\""));
+        let body = body
+            .replace(STYLE, "[shared callback stylesheet]")
+            .replace(&logo, "[embedded Syntropic logo]");
+        rendered.push(format!("--- {name} ---\n{body}"));
+    }
+    insta::assert_snapshot!("syntropic_status_pages", rendered.join("\n"));
 }

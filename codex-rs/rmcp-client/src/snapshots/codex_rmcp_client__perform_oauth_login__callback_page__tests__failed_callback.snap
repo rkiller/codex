@@ -1,6 +1,5 @@
 ---
 source: rmcp-client/src/oauth_callback_page_tests.rs
-assertion_line: 102
 expression: html(&response)
 ---
 <!doctype html>
@@ -8,11 +7,23 @@ expression: html(&response)
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Authentication failed</title>
+<title>Authentication failed · Codex</title>
 
+<style>[shared callback stylesheet]</style>
 </head>
-<body>
-<h1>Authentication failed</h1>
-<p>Codex could not complete authentication. Return to Codex and try again.</p>
+<body class="failure">
+<main class="shell">
+<header class="brand"><span class="brand-name">Codex</span><span class="brand-caption">ACCOUNT CONNECTION</span></header>
+<section class="card" aria-labelledby="status-title">
+<div class="artwork"><span class="codex-mark" aria-hidden="true">&gt;_</span><span class="art-caption">A secure connection.<br>A simpler day.</span></div>
+<div class="content">
+<span class="status"><span class="status-dot" aria-hidden="true"></span>ACTION NEEDED</span>
+<h1 id="status-title">Authentication failed</h1>
+<p class="message">Codex could not complete authentication. Return to Codex and try again.</p>
+<div class="next-step"><span class="step-mark" aria-hidden="true">↗</span><p>Start a new sign-in from Codex.</p></div>
+</div>
+</section>
+<footer><span class="footer-dot" aria-hidden="true"></span>Private by design<span class="footer-divider" aria-hidden="true">·</span>Secure sign-in with Codex</footer>
+</main>
 </body>
 </html>
