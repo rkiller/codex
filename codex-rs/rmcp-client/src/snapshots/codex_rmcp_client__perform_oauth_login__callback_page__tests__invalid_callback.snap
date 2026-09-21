@@ -1,0 +1,18 @@
+---
+source: rmcp-client/src/oauth_callback_page_tests.rs
+assertion_line: 58
+expression: html(&invalid)
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invalid OAuth callback</title>
+
+</head>
+<body>
+<h1>Invalid OAuth callback</h1>
+<p>This request does not match the callback. Return to Codex to continue signing in.</p>
+</body>
+</html>

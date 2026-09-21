@@ -95,6 +95,23 @@ async fn metadata(server: &MockServer, issuer: &str) {
         }))).mount(server).await;
 }
 
+async fn browser_result(authorization_url: &str) -> Result<String> {
+    let authorization = Url::parse(authorization_url)?;
+    let redirect = authorization
+        .query_pairs()
+        .find(|(key, _)| key == "redirect_uri")
+        .unwrap()
+        .1;
+    let redirect = Url::parse(&redirect)?;
+    let port = redirect.port().unwrap();
+    let path = redirect.path();
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
+    stream.write_all(format!("GET {path}?codex_oauth_result=1 HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").as_bytes()).await?;
+    let mut response = String::new();
+    stream.read_to_string(&mut response).await?;
+    Ok(response)
+}
+
 async fn callback(authorization_url: &str, issuer: &str, provider_error: bool) -> Result<()> {
     let query = Url::parse(authorization_url)?
         .query_pairs()
@@ -274,6 +291,12 @@ async fn enterprise_public_api_storage_and_privacy() -> Result<()> {
             .collect::<HashMap<_, _>>();
         callback(&authorization_url, &issuer, /*provider_error*/ false).await?;
         let credentials = login.wait().await?;
+        let mut browser = Box::pin(browser_result(&authorization_url));
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(100), &mut browser)
+                .await
+                .is_err()
+        );
         let token_requests = server
             .received_requests()
             .await
@@ -329,6 +352,9 @@ async fn enterprise_public_api_storage_and_privacy() -> Result<()> {
             *authority = None;
         }
         assert_eq!(*attempt.lock().await, None);
+        let response = browser.await?;
+        assert!(response.contains("Authentication complete"));
+        assert!(!response.contains(SECRET));
         let stored = tracing::subscriber::with_default(
             tracing::subscriber::NoSubscriber::default(),
             || {
@@ -399,11 +425,18 @@ async fn enterprise_public_api_storage_and_privacy() -> Result<()> {
 
     // Inject raw account identifiers into the actual keyring adapter's error chain.
     keyring.fail.store(true, Ordering::SeqCst);
-    let save_error = complete_login(&issuer)
+    let failed_login = login(&issuer, /*callback_url*/ None).await?;
+    let authorization_url = failed_login.authorization_url();
+    callback(&authorization_url, &issuer, /*provider_error*/ false).await?;
+    let save_error = failed_login
+        .wait()
         .await?
         .commit_if(|| async { Some(()) })
         .await
         .unwrap_err();
+    let response = browser_result(&authorization_url).await?;
+    assert!(response.contains("Authentication failed"));
+    assert!(!response.contains(SECRET));
     let delete_error =
         delete_enterprise_oauth_tokens(CREDENTIAL_NAME, &issuer, AuthKeyringBackendKind::Direct)
             .await

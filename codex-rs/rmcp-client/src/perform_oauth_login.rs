@@ -15,7 +15,6 @@ use rmcp::transport::auth::AuthorizationMetadata;
 use rmcp::transport::auth::OAuthClientConfig;
 use rmcp::transport::auth::OAuthHttpClient;
 use rmcp::transport::auth::OAuthState;
-use tiny_http::Response;
 use tiny_http::Server;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -44,6 +43,11 @@ use crate::save_oauth_tokens;
 use crate::utils::build_default_headers;
 use codex_config::types::AuthKeyringBackendKind;
 use codex_config::types::OAuthCredentialsStoreMode;
+
+#[path = "oauth_callback_page.rs"]
+mod callback_page;
+pub(crate) use callback_page::CallbackCompletion;
+use callback_page::spawn_callback_server;
 
 #[path = "oauth_callback_input.rs"]
 mod callback_input;
@@ -276,60 +280,6 @@ pub async fn perform_oauth_login_return_url(
     Ok(OauthLoginHandle::new(authorization_url, completion))
 }
 
-fn spawn_callback_server(
-    server: Arc<Server>,
-    tx: oneshot::Sender<CallbackResult>,
-    expected_callback_path: String,
-) {
-    tokio::task::spawn_blocking(move || {
-        while let Ok(request) = server.recv() {
-            let path = request.url().to_string();
-            match parse_oauth_callback(&path, &expected_callback_path) {
-                CallbackOutcome::Success(OauthCallbackResult {
-                    code,
-                    state,
-                    issuer,
-                }) => {
-                    let response = Response::from_string(
-                        "Authentication complete. You may close this window.",
-                    );
-                    if let Err(err) = request.respond(response) {
-                        eprintln!("Failed to respond to OAuth callback: {err}");
-                    }
-                    if let Err(message) = send_oauth_callback(
-                        tx,
-                        CallbackResult::Success(OauthCallbackResult {
-                            code,
-                            state,
-                            issuer,
-                        }),
-                    ) {
-                        eprintln!("{message}");
-                    }
-                    break;
-                }
-                CallbackOutcome::Error(error) => {
-                    let response = Response::from_string(error.to_string()).with_status_code(400);
-                    if let Err(err) = request.respond(response) {
-                        eprintln!("Failed to respond to OAuth callback: {err}");
-                    }
-                    if let Err(message) = send_oauth_callback(tx, CallbackResult::Error(error)) {
-                        eprintln!("{message}");
-                    }
-                    break;
-                }
-                CallbackOutcome::Invalid => {
-                    let response =
-                        Response::from_string("Invalid OAuth callback").with_status_code(400);
-                    if let Err(err) = request.respond(response) {
-                        eprintln!("Failed to respond to OAuth callback: {err}");
-                    }
-                }
-            }
-        }
-    });
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct OauthCallbackResult {
     code: String,
@@ -341,14 +291,6 @@ struct OauthCallbackResult {
 enum CallbackResult {
     Success(OauthCallbackResult),
     Error(OAuthProviderError),
-}
-
-fn send_oauth_callback(
-    tx: oneshot::Sender<CallbackResult>,
-    result: CallbackResult,
-) -> std::result::Result<(), &'static str> {
-    tx.send(result)
-        .map_err(|_| "OAuth callback receiver closed")
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -440,6 +382,7 @@ pub(crate) struct OauthLoginFlow {
     authorization_server_issuer: Option<String>,
     rx: oneshot::Receiver<CallbackResult>,
     guard: CallbackServerGuard,
+    pub(crate) callback_completion: Option<CallbackCompletion>,
     server_name: String,
     server_url: String,
     store_mode: OAuthCredentialsStoreMode,
@@ -698,7 +641,7 @@ impl OauthLoginFlow {
         };
         let callback_path = callback_path_from_redirect_uri(&redirect_uri)?;
         let (tx, rx) = oneshot::channel();
-        spawn_callback_server(server, tx, callback_path);
+        let callback_completion = spawn_callback_server(server, tx, callback_path);
         let auth_url = append_query_param(
             &oauth_state.get_authorization_url().await?,
             "resource",
@@ -714,6 +657,7 @@ impl OauthLoginFlow {
             authorization_server_issuer,
             rx,
             guard,
+            callback_completion: Some(callback_completion),
             server_name: server_name.to_string(),
             server_url: server_url.to_string(),
             store_mode,
@@ -727,17 +671,25 @@ impl OauthLoginFlow {
         self.auth_url.clone()
     }
 
-    async fn finish(self, emit_browser_url: bool) -> Result<()> {
+    async fn finish(mut self, emit_browser_url: bool) -> Result<()> {
+        let completion = self.callback_completion.take();
         let store_mode = self.store_mode;
         let keyring_backend_kind = self.keyring_backend_kind;
-        let stored = self.complete(emit_browser_url).await?;
-        save_oauth_tokens(
-            &stored.server_name,
-            &stored,
-            store_mode,
-            keyring_backend_kind,
-        )
-        .await
+        let result = async {
+            let stored = self.complete(emit_browser_url).await?;
+            save_oauth_tokens(
+                &stored.server_name,
+                &stored,
+                store_mode,
+                keyring_backend_kind,
+            )
+            .await
+        }
+        .await;
+        if let Some(completion) = completion {
+            completion.finish(&result).await;
+        }
+        result
     }
 
     pub(crate) async fn complete(mut self, emit_browser_url: bool) -> Result<StoredOAuthTokens> {

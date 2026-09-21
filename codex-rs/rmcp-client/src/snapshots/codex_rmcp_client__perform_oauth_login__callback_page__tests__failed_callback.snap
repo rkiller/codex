@@ -1,0 +1,18 @@
+---
+source: rmcp-client/src/oauth_callback_page_tests.rs
+assertion_line: 102
+expression: html(&response)
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authentication failed</title>
+
+</head>
+<body>
+<h1>Authentication failed</h1>
+<p>Codex could not complete authentication. Return to Codex and try again.</p>
+</body>
+</html>

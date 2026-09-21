@@ -1,0 +1,18 @@
+---
+source: rmcp-client/src/oauth_callback_page_tests.rs
+assertion_line: 64
+expression: html(&response)
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Completing authentication</title>
+<meta http-equiv="refresh" content="1;url=?codex_oauth_result=1">
+</head>
+<body>
+<h1>Completing authentication</h1>
+<p>Please wait while Codex verifies and saves your credentials.</p>
+</body>
+</html>

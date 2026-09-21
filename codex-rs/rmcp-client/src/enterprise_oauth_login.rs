@@ -36,6 +36,7 @@ use crate::oauth::delete_oauth_tokens_with_lock_held;
 use crate::oauth::save_oauth_tokens_with_lock_held;
 use crate::oauth::validate_authorization_server_endpoints;
 use crate::oauth_client_registration::McpOAuthClientRegistration;
+use crate::perform_oauth_login::CallbackCompletion;
 use crate::perform_oauth_login::OAuthHttpContext;
 use crate::perform_oauth_login::OAuthLoginPurpose;
 use crate::perform_oauth_login::OauthLoginFlow;
@@ -119,7 +120,8 @@ impl EnterpriseOAuthLoginHandle {
         self.flow.authorization_url()
     }
 
-    pub async fn wait(self) -> Result<EnterpriseOAuthCredentials> {
+    pub async fn wait(mut self) -> Result<EnterpriseOAuthCredentials> {
+        let callback_completion = self.flow.callback_completion.take();
         let stored = self
             .flow
             .complete(/*emit_browser_url*/ false)
@@ -129,6 +131,7 @@ impl EnterpriseOAuthLoginHandle {
         validate_enterprise_credentials(&stored)?;
         Ok(EnterpriseOAuthCredentials {
             stored,
+            callback_completion,
             keyring_backend: self.keyring_backend,
             generation: self.generation,
         })
@@ -137,6 +140,7 @@ impl EnterpriseOAuthLoginHandle {
 
 /// A validated grant that is not yet stored. It intentionally does not expose tokens.
 pub struct EnterpriseOAuthCredentials {
+    callback_completion: Option<CallbackCompletion>,
     stored: StoredOAuthTokens,
     keyring_backend: AuthKeyringBackendKind,
     generation: EnterpriseOAuthGeneration,
@@ -178,6 +182,9 @@ impl EnterpriseOAuthCredentials {
             )
         })
         .map_err(|_| anyhow!("failed to store enterprise credentials"))?;
+        if let Some(completion) = self.callback_completion {
+            completion.success();
+        }
         Ok(authority)
     }
 }

@@ -1,0 +1,18 @@
+---
+source: rmcp-client/src/oauth_callback_page_tests.rs
+assertion_line: 75
+expression: html(&response)
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authentication complete</title>
+
+</head>
+<body>
+<h1>Authentication complete</h1>
+<p>Your credentials have been saved. You may close this window.</p>
+</body>
+</html>
