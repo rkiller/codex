@@ -1,0 +1,29 @@
+---
+source: rmcp-client/src/oauth_callback_page_tests.rs
+expression: html(&invalid)
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invalid OAuth callback · Codex</title>
+
+<style>[shared callback stylesheet]</style>
+</head>
+<body class="invalid">
+<main class="shell">
+<header class="brand"><span class="brand-name">Codex</span><span class="brand-caption">ACCOUNT CONNECTION</span></header>
+<section class="card" aria-labelledby="status-title">
+<div class="artwork"><span class="codex-mark" aria-hidden="true">&gt;_</span><span class="art-caption">A secure connection.<br>A simpler day.</span></div>
+<div class="content">
+<span class="status"><span class="status-dot" aria-hidden="true"></span>CHECK REQUEST</span>
+<h1 id="status-title">Invalid OAuth callback</h1>
+<p class="message">This request does not match the callback. Return to Codex to continue signing in.</p>
+<div class="next-step"><span class="step-mark" aria-hidden="true">↗</span><p>Use the sign-in link provided by Codex.</p></div>
+</div>
+</section>
+<footer><span class="footer-dot" aria-hidden="true"></span>Private by design<span class="footer-divider" aria-hidden="true">·</span>Secure sign-in with Codex</footer>
+</main>
+</body>
+</html>

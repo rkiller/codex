@@ -81,18 +81,26 @@ where
     })
     .await
     .context("timed out waiting for OAuth callback")??;
-    // RMCP's issuer-mismatch error includes the received value. Reject it here
-    // without echoing any part of a pasted callback into terminal diagnostics.
-    if let CallbackResult::Success(callback) = &callback
-        && callback
-            .issuer
-            .as_deref()
-            .is_some_and(|issuer| Some(issuer) != flow.authorization_server_issuer.as_deref())
-    {
-        bail!("OAuth callback issuer does not match this login");
+    let completion = flow.callback_completion.take();
+    let result = async {
+        // RMCP's issuer-mismatch error includes the received value. Reject it here
+        // without echoing any part of a pasted callback into terminal diagnostics.
+        if let CallbackResult::Success(callback) = &callback
+            && callback
+                .issuer
+                .as_deref()
+                .is_some_and(|issuer| Some(issuer) != flow.authorization_server_issuer.as_deref())
+        {
+            bail!("OAuth callback issuer does not match this login");
+        }
+        let stored = flow.complete_callback(callback).await?;
+        save_oauth_tokens(server_name, &stored, store_mode, keyring_backend_kind).await
     }
-    let stored = flow.complete_callback(callback).await?;
-    save_oauth_tokens(server_name, &stored, store_mode, keyring_backend_kind).await
+    .await;
+    if let Some(completion) = completion {
+        completion.finish(&result).await;
+    }
+    result
 }
 
 fn parse_callback_url(
